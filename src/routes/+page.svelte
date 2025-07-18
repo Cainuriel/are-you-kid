@@ -3,29 +3,24 @@
   import { writable } from 'svelte/store';
   import IdentityManager from '$lib/components/IdentityManager.svelte';
   import ProofVerifier from '$lib/components//ProofVerifier.svelte';
-  // import ProofGenerator from '$lib/components/crypto/ProofGenerator.svelte';
+  import { currentIdentity } from '$lib/crypto/stores/identity.js';
 
   // Stores globales
-  const currentIdentity = writable(/** @type {any} */ (null));
-  const currentProof = writable(/** @type {any} */ (null));
   const verificationResults = writable(/** @type {Array<any>} */ ([]));
   const activeTab = writable('identity');
 
   // Variables reactivas
   let identity = /** @type {any} */ (null);
-  let proof = /** @type {any} */ (null);
   let results = /** @type {Array<any>} */ ([]);
   let activeTabValue = 'identity';
   let showWelcome = true;
   let demoStats = {
     identitiesCreated: 0,
-    proofsGenerated: 0,
     verificationsCompleted: 0
   };
 
   // Suscripciones
   currentIdentity.subscribe(value => identity = value);
-  currentProof.subscribe(value => proof = value);
   verificationResults.subscribe(value => results = value);
   activeTab.subscribe(value => activeTabValue = value);
 
@@ -35,27 +30,15 @@
     demoStats.identitiesCreated++;
     updateStats();
     
-    // Auto-navegar a generador de pruebas
+    // Auto-navegar a verificador
     setTimeout(() => {
-      activeTab.set('generator');
+      activeTab.set('verifier');
     }, 1000);
   }
 
   // Función para manejar carga de identidad
   function handleIdentityLoaded(/** @type {any} */ loadedIdentity) {
     currentIdentity.set(loadedIdentity);
-  }
-
-  // Función para manejar generación de pruebas
-  function handleProofGenerated(/** @type {any} */ newProof) {
-    currentProof.set(newProof);
-    demoStats.proofsGenerated++;
-    updateStats();
-    
-    // Auto-navegar a verificador
-    setTimeout(() => {
-      activeTab.set('verifier');
-    }, 1000);
   }
 
   // Función para manejar verificación completa
@@ -94,13 +77,11 @@
 
   // Función para resetear demo
   function resetDemo() {
-    if (confirm('¿Estás seguro de que quieres resetear toda la demo? Esto eliminará todas las identidades, pruebas y verificaciones.')) {
+    if (confirm('¿Estás seguro de que quieres resetear toda la demo? Esto eliminará todas las identidades y verificaciones.')) {
       currentIdentity.set(null);
-      currentProof.set(null);
       verificationResults.set([]);
       demoStats = {
         identitiesCreated: 0,
-        proofsGenerated: 0,
         verificationsCompleted: 0
       };
       
@@ -128,8 +109,19 @@
   onMount(() => {
     loadStats();
     
-    // Verificar si el welcome ya fue cerrado
+    // Cargar identidad desde localStorage si existe
     if (typeof window !== 'undefined') {
+      const savedIdentity = localStorage.getItem('zenroom-identity');
+      if (savedIdentity) {
+        try {
+          const identity = JSON.parse(savedIdentity);
+          currentIdentity.set(identity);
+        } catch (err) {
+          console.error('Error cargando identidad guardada:', err);
+        }
+      }
+      
+      // Verificar si el welcome ya fue cerrado
       const dismissed = localStorage.getItem('welcome-dismissed');
       if (dismissed === 'true') {
         showWelcome = false;
@@ -139,8 +131,8 @@
 </script>
 
 <svelte:head>
-  <title>Demo ZK Identity - Zenroom + SvelteKit</title>
-  <meta name="description" content="Demostración de identidad digital con Zero Knowledge usando Zenroom y SvelteKit" />
+  <title>Demo ZK Identity - Coconut & BBS+ con Zenroom</title>
+  <meta name="description" content="Demostración de identidad digital con protocolos Coconut y BBS+ usando Zenroom y SvelteKit" />
 </svelte:head>
 
 <div class="app">
@@ -156,10 +148,6 @@
           <div class="stat-item">
             <span class="stat-number">{demoStats.identitiesCreated}</span>
             <span class="stat-label">Identidades</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-number">{demoStats.proofsGenerated}</span>
-            <span class="stat-label">Pruebas</span>
           </div>
           <div class="stat-item">
             <span class="stat-number">{demoStats.verificationsCompleted}</span>
@@ -180,7 +168,8 @@
         <h2>🎉 Bienvenido a la Demo de Identidad Digital ZK</h2>
         <p>
           Esta demostración muestra cómo usar <strong>Zenroom</strong> con <strong>SvelteKit</strong> 
-          para crear aplicaciones de identidad digital que preservan la privacidad.
+          para crear aplicaciones de identidad digital que preservan la privacidad usando
+          <strong>protocolos Coconut y BBS+</strong>.
         </p>
         <div class="welcome-features">
           <div class="feature">
@@ -188,12 +177,12 @@
             <span>Verifica edad sin revelar información personal</span>
           </div>
           <div class="feature">
-            <span class="feature-icon">🌐</span>
-            <span>Integración blockchain para verificaciones on-chain</span>
+            <span class="feature-icon">🥥</span>
+            <span>Protocolos Coconut para threshold credentials</span>
           </div>
           <div class="feature">
-            <span class="feature-icon">🚀</span>
-            <span>Protocolos ZK avanzados (Coconut, BBS+)</span>
+            <span class="feature-icon">�</span>
+            <span>Protocolos BBS+ para selective disclosure</span>
           </div>
         </div>
         <div class="welcome-actions">
@@ -222,34 +211,14 @@
     </button>
 
     <button 
-      class="tab-button {activeTabValue === 'generator' ? 'active' : ''}"
-      on:click={() => changeTab('generator')}
-      disabled={!identity}
-    >
-      <span class="tab-icon">🔐</span>
-      <span class="tab-label">Generar Prueba</span>
-      {#if proof}
-        <span class="tab-badge">✓</span>
-      {/if}
-    </button>
-
-    <button 
       class="tab-button {activeTabValue === 'verifier' ? 'active' : ''}"
       on:click={() => changeTab('verifier')}
     >
       <span class="tab-icon">🔍</span>
-      <span class="tab-label">Verificar</span>
+      <span class="tab-label">Verificar Coconut & BBS+</span>
       {#if results.length > 0}
         <span class="tab-badge">{results.length}</span>
       {/if}
-    </button>
-
-    <button 
-      class="tab-button {activeTabValue === 'blockchain' ? 'active' : ''}"
-      on:click={() => changeTab('blockchain')}
-    >
-      <span class="tab-icon">⛓️</span>
-      <span class="tab-label">Blockchain</span>
     </button>
   </nav>
 
@@ -271,60 +240,9 @@
         {#if identity}
           <div class="next-step">
             <p>✅ Identidad creada exitosamente</p>
-            <button class="btn btn-primary" on:click={() => changeTab('generator')}>
-              Siguiente: Generar Prueba ZK →
+            <button class="btn btn-primary" on:click={() => changeTab('verifier')}>
+              Siguiente: Verificar Pruebas Coconut & BBS+ →
             </button>
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Proof Generator Tab -->
-    {#if activeTabValue === 'generator'}
-      <div class="tab-content">
-        <div class="tab-header">
-          <h2>🔐 Generador de Pruebas ZK</h2>
-          <p>Crea pruebas de edad sin revelar información personal</p>
-        </div>
-        
-        {#if !identity}
-          <div class="requirement-message">
-            <span class="requirement-icon">⚠️</span>
-            <div>
-              <h3>Identidad Requerida</h3>
-              <p>Primero necesitas crear una identidad digital</p>
-              <button class="btn btn-primary" on:click={() => changeTab('identity')}>
-                Crear Identidad
-              </button>
-            </div>
-          </div>
-        {:else}
-          <!-- Aquí iría el componente ProofGenerator cuando esté disponible -->
-          <div class="placeholder-component">
-            <div class="placeholder-content">
-              <h3>🚧 Generador de Pruebas ZK</h3>
-              <p>Componente en construcción...</p>
-              <div class="placeholder-features">
-                <div class="feature-preview">
-                  <span class="feature-icon">🥥</span>
-                  <span>Pruebas Coconut para threshold credentials</span>
-                </div>
-                <div class="feature-preview">
-                  <span class="feature-icon">🔐</span>
-                  <span>Pruebas BBS+ para selective disclosure</span>
-                </div>
-                <div class="feature-preview">
-                  <span class="feature-icon">📅</span>
-                  <span>Verificación de edad sin revelar fecha exacta</span>
-                </div>
-              </div>
-              <p class="placeholder-note">
-                Mientras tanto, puedes usar el verificador con pruebas de ejemplo
-              </p>
-              <button class="btn btn-primary" on:click={() => changeTab('verifier')}>
-                Ir al Verificador
-              </button>
-            </div>
           </div>
         {/if}
       </div>
@@ -334,72 +252,13 @@
     {#if activeTabValue === 'verifier'}
       <div class="tab-content">
         <div class="tab-header">
-          <h2>🔍 Verificador de Pruebas ZK</h2>
-          <p>Verifica edad sin acceder a información personal</p>
+          <h2>� Verificador de Pruebas Coconut & BBS+</h2>
+          <p>Verifica edad sin acceder a información personal usando protocolos ZK</p>
         </div>
         
         <ProofVerifier 
           onVerificationComplete={handleVerificationComplete}
-          allowBlockchainVerification={true}
         />
-      </div>
-    {/if}
-
-    <!-- Blockchain Tab -->
-    {#if activeTabValue === 'blockchain'}
-      <div class="tab-content">
-        <div class="tab-header">
-          <h2>⛓️ Integración Blockchain</h2>
-          <p>Verificación on-chain y smart contracts</p>
-        </div>
-        
-        <div class="blockchain-section">
-          <div class="blockchain-card">
-            <h3>🔗 Conexión Web3</h3>
-            <p>Conecta tu wallet para verificaciones on-chain</p>
-            <button class="btn btn-primary" disabled>
-              🦊 Conectar MetaMask
-            </button>
-            <p class="note">Funcionalidad en desarrollo</p>
-          </div>
-
-          <div class="blockchain-card">
-            <h3>📜 Smart Contracts</h3>
-            <p>Contratos inteligentes para verificación ZK</p>
-            <div class="contract-list">
-              <div class="contract-item">
-                <span class="contract-name">AgeVerifier.sol</span>
-                <span class="contract-status">📋 Plantilla</span>
-              </div>
-              <div class="contract-item">
-                <span class="contract-name">CoconutVerifier.sol</span>
-                <span class="contract-status">📋 Plantilla</span>
-              </div>
-              <div class="contract-item">
-                <span class="contract-name">BBSVerifier.sol</span>
-                <span class="contract-status">📋 Plantilla</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="blockchain-card">
-            <h3>📊 Estadísticas On-Chain</h3>
-            <div class="stats-grid">
-              <div class="stat-card">
-                <span class="stat-value">0</span>
-                <span class="stat-label">Verificaciones</span>
-              </div>
-              <div class="stat-card">
-                <span class="stat-value">0</span>
-                <span class="stat-label">Gas Usado</span>
-              </div>
-              <div class="stat-card">
-                <span class="stat-value">0</span>
-                <span class="stat-label">Contratos</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     {/if}
   </main>
@@ -422,15 +281,15 @@
         </a>
       </div>
       <div class="footer-section">
-        <h4>🌐 Blockchain</h4>
-        <p>Integración con redes descentralizadas</p>
-        <a href="https://ethereum.org" target="_blank" rel="noopener">
-          Ethereum →
+        <h4>🥥 Protocolos ZK</h4>
+        <p>Coconut y BBS+ para privacy-preserving proofs</p>
+        <a href="https://eprint.iacr.org/2018/104.pdf" target="_blank" rel="noopener">
+          Paper Coconut →
         </a>
       </div>
     </div>
     <div class="footer-bottom">
-      <p>Demo de Identidad Digital ZK - Construido con ❤️ por fernando lopez</p>
+      <p>Demo de Identidad Digital ZK - Protocolos Coconut & BBS+ con Zenroom</p>
     </div>
   </footer>
 </div>
@@ -754,83 +613,6 @@
     margin-bottom: 1rem;
   }
 
-  .blockchain-section {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-  }
-
-  .blockchain-card {
-    background: white;
-    border-radius: 16px;
-    padding: 2rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    border: 1px solid #e2e8f0;
-  }
-
-  .blockchain-card h3 {
-    color: #2d3748;
-    margin-bottom: 1rem;
-  }
-
-  .blockchain-card p {
-    color: #666;
-    margin-bottom: 1.5rem;
-  }
-
-  .contract-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .contract-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-  }
-
-  .contract-name {
-    font-family: 'Fira Code', monospace;
-    font-weight: 600;
-    color: #2d3748;
-  }
-
-  .contract-status {
-    font-size: 0.875rem;
-    color: #666;
-  }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-  }
-
-  .stat-card {
-    text-align: center;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 8px;
-  }
-
-  .stat-value {
-    display: block;
-    font-size: 2rem;
-    font-weight: 700;
-    color: #667eea;
-  }
-
-  .stat-label {
-    font-size: 0.875rem;
-    color: #666;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
-
   .note {
     color: #a0aec0;
     font-size: 0.875rem;
@@ -968,14 +750,6 @@
     }
 
     .welcome-features {
-      grid-template-columns: 1fr;
-    }
-
-    .blockchain-section {
-      grid-template-columns: 1fr;
-    }
-
-    .stats-grid {
       grid-template-columns: 1fr;
     }
 

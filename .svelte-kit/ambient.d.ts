@@ -46,7 +46,6 @@ declare module '$env/static/private' {
 	export const FPS_BROWSER_APP_PROFILE_STRING: string;
 	export const FPS_BROWSER_USER_PROFILE_STRING: string;
 	export const GIT_ASKPASS: string;
-	export const GIT_PAGER: string;
 	export const HOME: string;
 	export const HOMEDRIVE: string;
 	export const HOMEPATH: string;
@@ -54,7 +53,6 @@ declare module '$env/static/private' {
 	export const LANG: string;
 	export const LOCALAPPDATA: string;
 	export const LOGONSERVER: string;
-	export const MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY: string;
 	export const NODE: string;
 	export const NODE_ENV: string;
 	export const npm_command: string;
@@ -112,7 +110,6 @@ declare module '$env/static/private' {
 	export const VSCODE_GIT_IPC_HANDLE: string;
 	export const VSCODE_INJECTION: string;
 	export const windir: string;
-	export const WSLENV: string;
 	export const ZES_ENABLE_SYSMAN: string;
 }
 
@@ -165,7 +162,6 @@ declare module '$env/dynamic/private' {
 		FPS_BROWSER_APP_PROFILE_STRING: string;
 		FPS_BROWSER_USER_PROFILE_STRING: string;
 		GIT_ASKPASS: string;
-		GIT_PAGER: string;
 		HOME: string;
 		HOMEDRIVE: string;
 		HOMEPATH: string;
@@ -173,7 +169,6 @@ declare module '$env/dynamic/private' {
 		LANG: string;
 		LOCALAPPDATA: string;
 		LOGONSERVER: string;
-		MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY: string;
 		NODE: string;
 		NODE_ENV: string;
 		npm_command: string;
@@ -231,7 +226,6 @@ declare module '$env/dynamic/private' {
 		VSCODE_GIT_IPC_HANDLE: string;
 		VSCODE_INJECTION: string;
 		windir: string;
-		WSLENV: string;
 		ZES_ENABLE_SYSMAN: string;
 		[key: `PUBLIC_${string}`]: undefined;
 		[key: `${string}`]: string | undefined;

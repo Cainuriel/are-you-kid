@@ -6,7 +6,6 @@
 
   // Props
   export let onVerificationComplete = () => {};
-  export let allowBlockchainVerification = true;
   export let verifierPublicKey = /** @type {any} */ (null);
 
   // Stores reactivos
@@ -22,7 +21,7 @@
   let history = /** @type {Array<any>} */ ([]);
   let showHistory = false;
   let proofInput = '';
-  let verificationMethod = 'coconut'; // coconut, bbs, blockchain
+  let verificationMethod = 'coconut'; // coconut, bbs
   let ageThreshold = 18;
   let showAdvanced = false;
   let issuerPublicKey = '';
@@ -241,20 +240,6 @@ and print 'disclosed_attributes'
     };
   }
 
-  // Función para verificar en blockchain (simulado)
-  async function verifyOnBlockchain() {
-    // Simulación de verificación on-chain
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    return {
-      success: "true",
-      transaction_hash: "0x" + Math.random().toString(16).substr(2, 64),
-      block_number: Math.floor(Math.random() * 1000000),
-      gas_used: Math.floor(Math.random() * 50000) + 21000,
-      age_verification: "verified_over_18"
-    };
-  }
-
   // Función principal de verificación
   async function verifyProof() {
     clearError();
@@ -285,12 +270,6 @@ and print 'disclosed_attributes'
         case 'bbs':
           result = await verifyBBSProof(proof);
           break;
-        case 'blockchain':
-          if (!allowBlockchainVerification) {
-            throw new Error('Verificación blockchain no está habilitada');
-          }
-          result = await verifyOnBlockchain();
-          break;
         default:
           throw new Error('Método de verificación no válido');
       }
@@ -306,12 +285,7 @@ and print 'disclosed_attributes'
                     (result.disclosed_attributes && result.disclosed_attributes.age_over_18),
         threshold: ageThreshold,
         proof: proof,
-        result: result,
-        blockchainData: methodUsed === 'blockchain' ? {
-          transactionHash: result.transaction_hash,
-          blockNumber: result.block_number,
-          gasUsed: result.gas_used
-        } : null
+        result: result
       };
 
       verificationStore.set(verificationResult);
@@ -401,8 +375,9 @@ and print 'disclosed_attributes'
     
     if (verificationMethod === 'coconut') {
       // Si hay identidad actual, usar sus datos para crear una prueba más realista
-      if (identity && identity.age !== undefined) {
-        const isAdult = identity.age >= ageThreshold;
+      if (identity && (identity.age !== undefined || identity.personal?.age !== undefined)) {
+        const actualAge = identity.personal?.age || identity.age;
+        const isAdult = actualAge >= ageThreshold;
         
         exampleProof = {
           pi_v: {
@@ -455,19 +430,20 @@ and print 'disclosed_attributes'
       }
     } else if (verificationMethod === 'bbs') {
       // Ejemplo BBS+ basado en identidad actual
-      if (identity && identity.age !== undefined) {
-        const isAdult = identity.age >= ageThreshold;
+      if (identity && (identity.age !== undefined || identity.personal?.age !== undefined)) {
+        const actualAge = identity.personal?.age || identity.age;
+        const isAdult = actualAge >= ageThreshold;
         
         exampleProof = {
           signature: "BBS_SIG_" + Math.random().toString(36).substr(2, 40),
           disclosed_attributes: {
             age_over_18: isAdult ? "true" : "false",
-            age_over_threshold: (identity.age >= ageThreshold) ? "true" : "false",
+            age_over_threshold: actualAge >= ageThreshold ? "true" : "false",
             verification_type: "bbs_plus",
-            country: identity.nationality || "demo_country"
+            country: identity.personal?.nationality || identity.nationality || "demo_country"
           },
           proof: "BBS_PROOF_" + Math.random().toString(36).substr(2, 60),
-          public_key: identity.blsKeypair?.public || "BBS_PK_" + Math.random().toString(36).substr(2, 30),
+          public_key: identity.keypairs?.bls?.public || identity.blsKeypair?.public || "BBS_PK_" + Math.random().toString(36).substr(2, 30),
           timestamp: new Date().toISOString(),
           identity_metadata: {
             expected_age_verification: isAdult,
@@ -497,7 +473,7 @@ and print 'disclosed_attributes'
       // Fallback genérico
       exampleProof = {
         type: "generic_zk_proof",
-        age_verified: identity ? (identity.age >= ageThreshold) : true,
+        age_verified: identity ? ((identity.personal?.age || identity.age) >= ageThreshold) : true,
         threshold: ageThreshold,
         proof_data: "PROOF_" + Math.random().toString(36).substr(2, 50),
         timestamp: new Date().toISOString(),
@@ -549,13 +525,6 @@ and print 'disclosed_attributes'
             <span class="radio-label">🔐 BBS+</span>
             <small>Selective disclosure</small>
           </label>
-          {#if allowBlockchainVerification}
-            <label class="radio-option">
-              <input type="radio" bind:group={verificationMethod} value="blockchain" />
-              <span class="radio-label">⛓️ Blockchain</span>
-              <small>On-chain verification</small>
-            </label>
-          {/if}
           </div>
         </fieldset>
       </div>
@@ -581,11 +550,11 @@ and print 'disclosed_attributes'
           <div class="identity-info">
             <h4>Identidad Actual Detectada</h4>
             <p>
-              <strong>Nombre:</strong> {identity.name || 'No especificado'}<br>
-              <strong>Edad:</strong> {identity.age || 'No especificada'} años<br>
+              <strong>Nombre:</strong> {identity.personal?.name || identity.name || 'No especificado'}<br>
+              <strong>Edad:</strong> {identity.personal?.age || identity.age || 'No especificada'} años<br>
               <strong>¿Mayor de {ageThreshold}?</strong> 
-              <span class="age-indicator {identity.age >= ageThreshold ? 'adult' : 'minor'}">
-                {identity.age >= ageThreshold ? '✅ Sí' : '❌ No'}
+              <span class="age-indicator {(identity.personal?.age || identity.age) >= ageThreshold ? 'adult' : 'minor'}">
+                {(identity.personal?.age || identity.age) >= ageThreshold ? '✅ Sí' : '❌ No'}
               </span>
             </p>
             <small>Las pruebas de ejemplo se basarán en esta identidad</small>
@@ -705,23 +674,6 @@ and print 'disclosed_attributes'
                 <span class="label">ID Verificación:</span>
                 <span class="monospace">{verification.id}</span>
               </div>
-
-              {#if verification.blockchainData}
-                <div class="detail-item">
-                  <span class="label">Transaction Hash:</span>
-                  <span class="monospace blockchain-hash">{verification.blockchainData.transactionHash}</span>
-                </div>
-                
-                <div class="detail-item">
-                  <span class="label">Block Number:</span>
-                  <span>{verification.blockchainData.blockNumber.toLocaleString()}</span>
-                </div>
-                
-                <div class="detail-item">
-                  <span class="label">Gas Used:</span>
-                  <span>{verification.blockchainData.gasUsed.toLocaleString()}</span>
-                </div>
-              {/if}
             </div>
           </div>
 
@@ -1275,10 +1227,6 @@ and print 'disclosed_attributes'
     background: linear-gradient(135deg, #667eea, #764ba2);
   }
 
-  .method-blockchain {
-    background: linear-gradient(135deg, #4299e1, #3182ce);
-  }
-
   .result-details {
     margin-bottom: 1.5rem;
   }
@@ -1312,10 +1260,6 @@ and print 'disclosed_attributes'
   .monospace {
     font-family: 'Fira Code', monospace;
     font-size: 0.8rem;
-  }
-
-  .blockchain-hash {
-    word-break: break-all;
   }
 
   .result-actions {

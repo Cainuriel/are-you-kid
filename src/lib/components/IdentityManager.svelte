@@ -131,6 +131,29 @@ Then print my 'bls key'
       // Crear identidad completa
       const newIdentity = {
         id: crypto.randomUUID(),
+        personal: {
+          name: personalInfo.name,
+          birthDate: personalInfo.birthDate,
+          nationality: personalInfo.nationality,
+          age: finalAge,
+          isAdult: finalAge >= 18
+        },
+        keypairs: {
+          credential: keypair['credential keypair'],
+          bls: blsKeypair['bls keypair']
+        },
+        publicKeys: {
+          coconut: keypair['credential keypair'].public,
+          bls: blsKeypair['bls keypair'].public,
+          ecdsa: keypair['credential keypair'].public
+        },
+        metadata: {
+          created: new Date().toISOString(),
+          verified: false,
+          revoked: false,
+          version: '1.0'
+        },
+        // Mantener compatibilidad con estructura anterior
         name: personalInfo.name,
         birthDate: personalInfo.birthDate,
         nationality: personalInfo.nationality,
