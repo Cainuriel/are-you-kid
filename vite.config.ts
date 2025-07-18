@@ -1,0 +1,15 @@
+import tailwindcss from '@tailwindcss/vite';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+	plugins: [tailwindcss(), sveltekit()],
+	define: { global: 'globalThis' },
+	optimizeDeps: { include: ['zenroom'] },
+	resolve: {
+		alias: {
+			crypto: 'crypto-browserify',
+			stream: 'stream-browserify'
+		}
+	}
+});
