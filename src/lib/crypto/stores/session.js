@@ -1,6 +1,18 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { ZK_PROTOCOLS, PREDICATES } from '$lib/crypto/zenroom/proofs.js';
+
+// Constantes de protocolos ZK actualizadas
+export const ZK_PROTOCOLS = {
+  BBS_PLUS: 'bbs_plus',
+  COCONUT: 'coconut_simulation'
+};
+
+export const PREDICATES = {
+  AGE_OVER: 'age_over',
+  AGE_UNDER: 'age_under',
+  COUNTRY_IS: 'country_is',
+  CUSTOM: 'custom'
+};
 
 /**
  * Store de sesión criptográfica usando Svelte stores
@@ -27,21 +39,22 @@ export const connectionStatus = writable({
 
 // Store de configuración de protocolos ZK
 export const zkConfig = writable({
-  defaultProtocol: ZK_PROTOCOLS.COCONUT,
+  defaultProtocol: ZK_PROTOCOLS.BBS_PLUS, // Cambiar a BBS+ como predeterminado
   ageThreshold: 18,
-  enableBatchVerification: true,
+  enableBatchVerification: false, // Deshabilitado para simplicidad
   maxProofAge: 3600000, // 1 hora en ms
   trustedIssuers: /** @type {Array<any>} */ ([]),
-  verificationEndpoints: /** @type {Array<any>} */ ([])
+  verificationEndpoints: /** @type {Array<any>} */ ([]),
+  cryptoProvider: 'bls12_381' // Nuevo campo
 });
 
-// Store de configuración blockchain
+// Store de configuración blockchain (deshabilitado)
 export const blockchainConfig = writable({
-  enabled: false,
-  network: 'localhost',
-  rpcUrl: 'http://localhost:8545',
-  chainId: 1337,
-  gasLimit: 500000,
+  enabled: false, // Deshabilitado completamente
+  network: 'none',
+  rpcUrl: null,
+  chainId: null,
+  gasLimit: 0,
   contracts: {
     verifier: null,
     registry: null
@@ -116,12 +129,12 @@ export const fullConfig = derived(
 
 // Constantes para localStorage
 const STORAGE_KEYS = {
-  SESSION: 'zenroom-session-config',
-  ZK_CONFIG: 'zenroom-zk-config',
-  BLOCKCHAIN_CONFIG: 'zenroom-blockchain-config',
-  USER_PREFS: 'zenroom-user-preferences',
-  OPERATION_HISTORY: 'zenroom-operation-history',
-  SESSION_STATS: 'zenroom-session-stats'
+  SESSION: 'zkapp-session-config',
+  ZK_CONFIG: 'zkapp-zk-config',
+  BLOCKCHAIN_CONFIG: 'zkapp-blockchain-config',
+  USER_PREFS: 'zkapp-user-preferences',
+  OPERATION_HISTORY: 'zkapp-operation-history',
+  SESSION_STATS: 'zkapp-session-stats'
 };
 
 /**
@@ -533,20 +546,21 @@ class SessionStore {
     });
 
     zkConfig.set({
-      defaultProtocol: ZK_PROTOCOLS.COCONUT,
+      defaultProtocol: ZK_PROTOCOLS.BBS_PLUS,
       ageThreshold: 18,
-      enableBatchVerification: true,
+      enableBatchVerification: false,
       maxProofAge: 3600000,
       trustedIssuers: [],
-      verificationEndpoints: []
+      verificationEndpoints: [],
+      cryptoProvider: 'bls12_381'
     });
 
     blockchainConfig.set({
       enabled: false,
-      network: 'localhost',
-      rpcUrl: 'http://localhost:8545',
-      chainId: 1337,
-      gasLimit: 500000,
+      network: 'none',
+      rpcUrl: null,
+      chainId: null,
+      gasLimit: 0,
       contracts: { verifier: null, registry: null }
     });
 

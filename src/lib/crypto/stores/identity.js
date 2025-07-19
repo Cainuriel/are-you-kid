@@ -1,30 +1,118 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { createIdentity, validateIdentity, getIdentitySummary } from '$lib/crypto/zenroom/identity.js';
+import { 
+  createIdentity, 
+  getCurrentIdentity,
+  getAllIdentities as getProviderIdentities,
+  exportForStorage,
+  importFromStorage,
+  updateIdentity,
+  validateIdentityIntegrity,
+  getIdentityStats as getProviderStats
+} from '$lib/crypto/identity-provider.js';
+
+/**
+ * @typedef {Object} PersonalInfo
+ * @property {string} name - Nombre completo
+ * @property {number} age - Edad en años
+ * @property {string} country - País de residencia
+ * @property {string} [email] - Email opcional
+ * @property {string} [phone] - Teléfono opcional
+ */
+
+/**
+ * @typedef {Object} IdentityMetadata
+ * @property {string | null} lastUpdated - Última actualización ISO string
+ * @property {string} version - Versión del formato de identidad
+ * @property {boolean} isNew - Si es una identidad recién creada
+ * @property {boolean} hasBackup - Si tiene backup guardado
+ * @property {string} provider - Proveedor criptográfico usado
+ */
+
+/**
+ * @typedef {Object} KeyPair
+ * @property {Object} bbs - Claves BBS+
+ * @property {string} bbs.publicKeyHex - Clave pública BBS+ en hex
+ * @property {Uint8Array|number[]} bbs.secretKey - Clave privada BBS+
+ * @property {string} [bbs.secretKeyHex] - Clave privada BBS+ en hex
+ * @property {Object} coconut - Claves Coconut
+ * @property {string} coconut.publicKeyHex - Clave pública Coconut en hex
+ * @property {Uint8Array|number[]} coconut.privateKey - Clave privada Coconut
+ * @property {string} [coconut.privateKeyHex] - Clave privada Coconut en hex
+ */
+
+/**
+ * @typedef {Object} Identity
+ * @property {string} id - ID único de la identidad
+ * @property {PersonalInfo} personal - Información personal
+ * @property {KeyPair} keyPair - Par de claves criptográficas
+ * @property {string} created - Fecha de creación ISO string
+ * @property {string} lastModified - Última modificación ISO string
+ * @property {string} type - Tipo de identidad
+ * @property {string} version - Versión del formato
+ * @property {Object} integrity - Datos de integridad
+ */
+
+/**
+ * @typedef {Object} IdentityInfo
+ * @property {string} id - ID de la identidad
+ * @property {string} name - Nombre
+ * @property {number} age - Edad
+ * @property {boolean} isAdult - Si es mayor de edad
+ * @property {string} country - País
+ * @property {string} created - Fecha de creación
+ * @property {string} type - Tipo de identidad
+ * @property {string} version - Versión
+ */
+
+/**
+ * @typedef {Object} PublicKeyInfo
+ * @property {Object} bbs - Info de claves BBS+
+ * @property {string | null} bbs.publicKey - Clave pública BBS+
+ * @property {boolean} bbs.hasPrivateKey - Si tiene clave privada
+ * @property {Object} coconut - Info de claves Coconut
+ * @property {string | null} coconut.publicKey - Clave pública Coconut
+ * @property {boolean} coconut.hasPrivateKey - Si tiene clave privada
+ */
+
+/**
+ * @typedef {Object} VerificationStatus
+ * @property {boolean} hasIdentity - Si tiene identidad cargada
+ * @property {boolean} isVerified - Si está verificada
+ * @property {boolean} canCreateProofs - Si puede crear pruebas
+ * @property {boolean} hasBBSKeys - Si tiene claves BBS+
+ * @property {boolean} hasCoconutKeys - Si tiene claves Coconut
+ */
 
 /**
  * Store de identidad digital usando Svelte stores
- * Maneja el estado global de la identidad del usuario con persistencia automática
+ * Implementación con BLS12-381 y criptografía moderna
  */
 
 // Store principal de identidad
+/** @type {import('svelte/store').Writable<Identity | null>} */
 export const currentIdentity = writable(/** @type {any} */ (null));
 
 // Store de estado de carga
+/** @type {import('svelte/store').Writable<boolean>} */
 export const identityLoading = writable(false);
 
 // Store de errores
+/** @type {import('svelte/store').Writable<string | null>} */
 export const identityError = writable(/** @type {string | null} */ (null));
 
 // Store de metadatos de identidad
+/** @type {import('svelte/store').Writable<IdentityMetadata>} */
 export const identityMetadata = writable({
   lastUpdated: /** @type {string | null} */ (null),
-  version: '1.0',
+  version: '2.0',
   isNew: false,
-  hasBackup: false
+  hasBackup: false,
+  provider: 'bls12_381'
 });
 
 // Store derivado para información pública de la identidad
+/** @type {import('svelte/store').Readable<IdentityInfo | null>} */
 export const identityInfo = derived(
   currentIdentity,
   ($currentIdentity) => {
@@ -32,13 +120,13 @@ export const identityInfo = derived(
     
     return {
       id: $currentIdentity.id,
-      name: $currentIdentity.personal.name,
-      age: $currentIdentity.personal.age,
-      isAdult: $currentIdentity.personal.isAdult,
-      nationality: $currentIdentity.personal.nationality,
+      name: $currentIdentity.personal?.name || 'Unknown',
+      age: $currentIdentity.personal?.age || 0,
+      isAdult: ($currentIdentity.personal?.age || 0) >= 18,
+      country: $currentIdentity.personal?.country || 'Unknown',
       created: $currentIdentity.created,
-      verified: $currentIdentity.metadata.verified,
-      revoked: $currentIdentity.metadata.revoked
+      type: $currentIdentity.type || 'bls12_381_identity',
+      version: $currentIdentity.version || '2.0'
     };
   }
 );
@@ -47,12 +135,17 @@ export const identityInfo = derived(
 export const publicKeys = derived(
   currentIdentity,
   ($currentIdentity) => {
-    if (!$currentIdentity) return null;
+    if (!$currentIdentity || !$currentIdentity.keyPair) return null;
     
     return {
-      coconut: $currentIdentity.publicKeys.coconut,
-      bls: $currentIdentity.publicKeys.bls,
-      ecdsa: $currentIdentity.publicKeys.ecdsa
+      bbs: {
+        publicKey: $currentIdentity.keyPair.bbs?.publicKeyHex || null,
+        hasPrivateKey: !!$currentIdentity.keyPair.bbs?.secretKey
+      },
+      coconut: {
+        publicKey: $currentIdentity.keyPair.coconut?.publicKeyHex || null,
+        hasPrivateKey: !!$currentIdentity.keyPair.coconut?.privateKey
+      }
     };
   }
 );
@@ -64,24 +157,29 @@ export const verificationStatus = derived(
     if (!$currentIdentity) return {
       hasIdentity: false,
       isVerified: false,
-      isRevoked: false,
-      canCreateProofs: false
+      canCreateProofs: false,
+      hasBBSKeys: false,
+      hasCoconutKeys: false
     };
+    
+    const hasBBSKeys = !!$currentIdentity.keyPair?.bbs?.secretKey;
+    const hasCoconutKeys = !!$currentIdentity.keyPair?.coconut?.privateKey;
     
     return {
       hasIdentity: true,
-      isVerified: $currentIdentity.metadata.verified,
-      isRevoked: $currentIdentity.metadata.revoked,
-      canCreateProofs: !$currentIdentity.metadata.revoked && $currentIdentity.keypairs
+      isVerified: true, // BLS12-381 identities are self-verified
+      canCreateProofs: hasBBSKeys || hasCoconutKeys,
+      hasBBSKeys,
+      hasCoconutKeys
     };
   }
 );
 
 // Constantes para localStorage
 const STORAGE_KEYS = {
-  IDENTITY: 'zenroom-identity',
-  METADATA: 'zenroom-identity-metadata',
-  BACKUP: 'zenroom-identity-backup'
+  IDENTITY: 'bls12381-identity',
+  METADATA: 'bls12381-identity-metadata',
+  PRIVATE_KEYS: 'bls12381-private-keys'
 };
 
 /**
@@ -89,8 +187,8 @@ const STORAGE_KEYS = {
  */
 class IdentityStore {
   constructor() {
-    this.digitalIdentity = createIdentity();
     this.initialized = false;
+    this.currentIdentityId = null;
     
     // Inicializar automáticamente en el navegador
     if (browser) {
@@ -115,23 +213,39 @@ class IdentityStore {
 
   /**
    * Crea una nueva identidad digital
-   * @param {any} personalInfo - Información personal del usuario
-   * @returns {Promise<any>} Identidad creada
    */
-  async createIdentity(personalInfo) {
+  /**
+   * Crea una nueva identidad digital
+   * @param {PersonalInfo} personalInfo
+   * @returns {Promise<Identity>}
+   */
+  async createNewIdentity(personalInfo) {
     identityLoading.set(true);
     identityError.set(null);
 
     try {
-      // Generar nueva identidad
-      const identity = await this.digitalIdentity.generateIdentity(personalInfo);
-      
+      // Crear nueva identidad usando el provider
+      const identity = await createIdentity(personalInfo);
+
+      // Asegurar que bbs.secretKey es Uint8Array
+      if (
+        identity.keyPair?.bbs?.secretKey &&
+        Array.isArray(identity.keyPair.bbs.secretKey) &&
+        !(identity.keyPair.bbs.secretKey instanceof Uint8Array)
+      ) {
+        // Convertir array a Uint8Array de manera segura
+        const secretKeyArray = identity.keyPair.bbs.secretKey;
+        (/** @type {any} */ (identity.keyPair.bbs)).secretKey = new Uint8Array(secretKeyArray);
+      }
+
       // Actualizar stores
-      currentIdentity.set(identity);
+      currentIdentity.set(/** @type {any} */ (identity));
+      this.currentIdentityId = identity.id;
+
       identityMetadata.update(meta => ({
         ...meta,
         lastUpdated: new Date().toISOString(),
-        version: (/** @type {any} */ (identity)).version || '1.0',
+        version: identity.version || '2.0',
         isNew: true,
         hasBackup: false
       }));
@@ -139,7 +253,8 @@ class IdentityStore {
       // Persistir automáticamente
       await this.saveToStorage();
 
-      return identity;
+      console.log('✅ Nueva identidad creada y guardada:', identity.personal.name);
+      return /** @type {any} */ (identity);
 
     } catch (error) {
       const errorMessage = `Error creando identidad: ${error instanceof Error ? error.message : String(error)}`;
@@ -151,36 +266,73 @@ class IdentityStore {
   }
 
   /**
-   * Carga una identidad existente
-   * @param {any} identityData - Datos de identidad a cargar
-   * @returns {Promise<any>} Identidad cargada
+   * Cargar identidad existente por ID
+   * @param {string} identityId - ID de la identidad a cargar
+   * @returns {Promise<Identity>}
    */
-  async loadIdentity(identityData) {
+  async loadIdentityById(identityId) {
     identityLoading.set(true);
     identityError.set(null);
 
     try {
-      // Validar datos de identidad
-      if (!validateIdentity(identityData)) {
-        throw new Error('Datos de identidad inválidos');
+      const identity = getCurrentIdentity(identityId);
+      if (!identity) {
+        throw new Error(`Identidad ${identityId} no encontrada`);
       }
 
-      // Importar identidad
-      const identity = this.digitalIdentity.importIdentity(identityData);
-      
+      // Verifica que la identidad tenga todas las propiedades requeridas
+      if (!identity.keyPair || !identity.integrity) {
+        throw new Error('La identidad cargada no tiene keyPair o integrity');
+      }
+
+      // Convertir secretKey a Uint8Array si es necesario
+      if (
+        identity.keyPair?.bbs?.secretKey &&
+        Array.isArray(identity.keyPair.bbs.secretKey) &&
+        !(identity.keyPair.bbs.secretKey instanceof Uint8Array)
+      ) {
+        (/** @type {any} */ (identity.keyPair.bbs)).secretKey = new Uint8Array(identity.keyPair.bbs.secretKey);
+      }
+
+      // Convertir coconut.privateKey a Uint8Array si es necesario
+      if (
+        identity.keyPair?.coconut?.privateKey &&
+        Array.isArray(identity.keyPair.coconut.privateKey) &&
+        !(identity.keyPair.coconut.privateKey instanceof Uint8Array)
+      ) {
+        (/** @type {any} */ (identity.keyPair.coconut)).privateKey = new Uint8Array(identity.keyPair.coconut.privateKey);
+      }
+
+      // Convertir bbs.publicKey a Uint8Array si es necesario
+      if (
+        identity.keyPair?.bbs?.publicKey &&
+        Array.isArray(identity.keyPair.bbs.publicKey) &&
+        !(identity.keyPair.bbs.publicKey instanceof Uint8Array)
+      ) {
+        (/** @type {any} */ (identity.keyPair.bbs)).publicKey = new Uint8Array(identity.keyPair.bbs.publicKey);
+      }
+
+      // Asegurar que bbs.secretKey es Uint8Array
+      if (
+        identity.keyPair?.bbs?.secretKey &&
+        !(identity.keyPair.bbs.secretKey instanceof Uint8Array)
+      ) {
+        (/** @type {any} */ (identity.keyPair.bbs)).secretKey = new Uint8Array(identity.keyPair.bbs.secretKey);
+      }
+
       // Actualizar stores
-      currentIdentity.set(identity);
+      currentIdentity.set(/** @type {any} */ (identity));
+      this.currentIdentityId = identityId;
+      
       identityMetadata.set({
         lastUpdated: new Date().toISOString(),
-        version: identity.version,
+        version: identity.version || '2.0',
         isNew: false,
-        hasBackup: true
+        hasBackup: true,
+        provider: 'bls12_381'
       });
 
-      // Persistir
-      await this.saveToStorage();
-
-      return identity;
+      return /** @type {any} */ (identity);
 
     } catch (error) {
       const errorMessage = `Error cargando identidad: ${error instanceof Error ? error.message : String(error)}`;
@@ -192,189 +344,97 @@ class IdentityStore {
   }
 
   /**
-   * Actualiza metadatos de la identidad
-   * @param {any} updates - Actualizaciones a aplicar
+   * Actualizar datos de la identidad actual
+   * @param {Partial<PersonalInfo>} updates - Actualizaciones a aplicar
+   * @returns {Promise<Identity>}
    */
-  async updateIdentityMetadata(updates) {
+  async updateCurrentIdentity(updates) {
     const identity = get(currentIdentity);
     if (!identity) {
-      throw new Error('No hay identidad para actualizar');
+      throw new Error('No hay identidad cargada para actualizar');
     }
 
     try {
-      this.digitalIdentity.updateMetadata(updates);
-      const updatedIdentity = this.digitalIdentity.getCurrentIdentity();
+      const updatedIdentity = updateIdentity(identity.id, updates);
       
       currentIdentity.set(updatedIdentity);
-      identityMetadata.update(metadata => ({
-        ...metadata,
+      identityMetadata.update(meta => ({
+        ...meta,
         lastUpdated: new Date().toISOString()
       }));
 
       await this.saveToStorage();
+      return updatedIdentity;
 
     } catch (error) {
-      identityError.set(`Error actualizando metadatos: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      const errorMessage = `Error actualizando identidad: ${error instanceof Error ? error.message : String(error)}`;
+      identityError.set(errorMessage);
+      throw new Error(errorMessage);
     }
   }
 
   /**
-   * Verifica la identidad actual
+   * Validar integridad de la identidad actual
    */
-  async verifyIdentity() {
+  validateCurrentIdentity() {
     const identity = get(currentIdentity);
     if (!identity) {
-      throw new Error('No hay identidad para verificar');
+      return { valid: false, reason: 'No hay identidad cargada' };
     }
 
-    try {
-      await this.updateIdentityMetadata({ verified: true });
-    } catch (error) {
-      identityError.set(`Error verificando identidad: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
+    return validateIdentityIntegrity(identity.id);
   }
 
   /**
-   * Revoca la identidad actual
+   * Exportar identidad actual
    */
-  async revokeIdentity() {
-    const identity = get(currentIdentity);
-    if (!identity) {
-      throw new Error('No hay identidad para revocar');
-    }
-
-    try {
-      this.digitalIdentity.revokeIdentity();
-      const revokedIdentity = this.digitalIdentity.getCurrentIdentity();
-      
-      currentIdentity.set(revokedIdentity);
-      identityMetadata.update(metadata => ({
-        ...metadata,
-        lastUpdated: new Date().toISOString()
-      }));
-
-      await this.saveToStorage();
-
-    } catch (error) {
-      identityError.set(`Error revocando identidad: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Exporta la identidad para backup
-   * @param {boolean} includePrivateKeys - Si incluir claves privadas
-   * @returns {Object} Identidad exportada
-   */
-  exportIdentity(includePrivateKeys = false) {
+  exportCurrentIdentity(includePrivateKeys = false) {
     const identity = get(currentIdentity);
     if (!identity) {
       throw new Error('No hay identidad para exportar');
     }
 
-    try {
-      return this.digitalIdentity.exportIdentity(includePrivateKeys);
-    } catch (error) {
-      identityError.set(`Error exportando identidad: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
+    return exportForStorage(identity.id, includePrivateKeys);
   }
 
   /**
-   * Crea un backup de la identidad
+   * Importar identidad desde datos exportados
+   * @param {Object} exportedData - Datos exportados de identidad
+   * @param {Object|null} privateKeys - Claves privadas opcionales
+   * @returns {Promise<Identity>}
    */
-  async createBackup() {
-    const identity = get(currentIdentity);
-    if (!identity) {
-      throw new Error('No hay identidad para respaldar');
-    }
+  async importIdentity(exportedData, privateKeys = null) {
+    identityLoading.set(true);
+    identityError.set(null);
 
     try {
-      const backup = this.exportIdentity(true);
-      const backupData = {
-        identity: backup,
-        metadata: get(identityMetadata),
-        timestamp: new Date().toISOString(),
-        version: '1.0'
-      };
-
-      if (browser) {
-        localStorage.setItem(STORAGE_KEYS.BACKUP, JSON.stringify(backupData));
-      }
-
-      identityMetadata.update(metadata => ({
-        ...metadata,
-        hasBackup: true,
-        lastUpdated: new Date().toISOString()
-      }));
-
-      return backupData;
-
-    } catch (error) {
-      identityError.set(`Error creando backup: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Restaura desde backup
-   */
-  async restoreFromBackup() {
-    if (!browser) {
-      throw new Error('Backup solo disponible en navegador');
-    }
-
-    try {
-      const backupData = localStorage.getItem(STORAGE_KEYS.BACKUP);
-      if (!backupData) {
-        throw new Error('No se encontró backup');
-      }
-
-      const backup = JSON.parse(backupData);
-      await this.loadIdentity(backup.identity);
-
-      return backup;
-
-    } catch (error) {
-      identityError.set(`Error restaurando backup: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Elimina la identidad actual
-   */
-  async deleteIdentity() {
-    try {
-      // Limpiar stores
-      currentIdentity.set(null);
+      const identity = await importFromStorage(exportedData, /** @type {any} */ (privateKeys));
+      
+      currentIdentity.set(/** @type {any} */ (identity));
+      this.currentIdentityId = identity.id;
+      
       identityMetadata.set({
-        lastUpdated: null,
-        version: '1.0',
+        lastUpdated: new Date().toISOString(),
+        version: identity.version || '2.0',
         isNew: false,
-        hasBackup: false
+        hasBackup: true,
+        provider: 'bls12_381'
       });
-      identityError.set(null);
 
-      // Limpiar storage
-      if (browser) {
-        localStorage.removeItem(STORAGE_KEYS.IDENTITY);
-        localStorage.removeItem(STORAGE_KEYS.METADATA);
-      }
-
-      // Reinicializar instancia
-      this.digitalIdentity = createIdentity();
+      await this.saveToStorage();
+      return /** @type {any} */ (identity);
 
     } catch (error) {
-      identityError.set(`Error eliminando identidad: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      const errorMessage = `Error importando identidad: ${error instanceof Error ? error.message : String(error)}`;
+      identityError.set(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      identityLoading.set(false);
     }
   }
 
   /**
-   * Guarda en localStorage
+   * Guardar en localStorage
    */
   async saveToStorage() {
     if (!browser) return;
@@ -384,235 +444,191 @@ class IdentityStore {
       const metadata = get(identityMetadata);
 
       if (identity) {
-        localStorage.setItem(STORAGE_KEYS.IDENTITY, JSON.stringify(identity));
-      }
-      
-      if (metadata) {
+        // Guardar datos públicos
+        const publicData = exportForStorage(identity.id, false);
+        localStorage.setItem(STORAGE_KEYS.IDENTITY, JSON.stringify(publicData));
+        
+        // Guardar claves privadas por separado
+        const privateData = exportForStorage(identity.id, true);
+        const privateDataAny = /** @type {any} */ (privateData);
+        localStorage.setItem(STORAGE_KEYS.PRIVATE_KEYS, JSON.stringify({
+          bbs: privateDataAny.keyPair?.bbs?.secretKeyHex,
+          coconut: privateDataAny.keyPair?.coconut?.privateKeyHex
+        }));
+        
+        // Guardar metadatos
         localStorage.setItem(STORAGE_KEYS.METADATA, JSON.stringify(metadata));
+        
+        console.log('✅ Identidad guardada en localStorage');
       }
-
     } catch (error) {
-      console.error('Error guardando en storage:', error);
-      throw new Error('Error persistiendo datos');
+      console.error('❌ Error guardando en localStorage:', error);
     }
   }
 
   /**
-   * Carga desde localStorage
+   * Cargar desde localStorage
    */
   async loadFromStorage() {
     if (!browser) return;
 
     try {
-      // Cargar identidad
       const identityData = localStorage.getItem(STORAGE_KEYS.IDENTITY);
-      if (identityData) {
-        const identity = JSON.parse(identityData);
-        if (validateIdentity(identity)) {
-          this.digitalIdentity.importIdentity(identity);
-          currentIdentity.set(identity);
-        }
-      }
-
-      // Cargar metadatos
+      const privateKeysData = localStorage.getItem(STORAGE_KEYS.PRIVATE_KEYS);
       const metadataData = localStorage.getItem(STORAGE_KEYS.METADATA);
-      if (metadataData) {
-        const metadata = JSON.parse(metadataData);
-        identityMetadata.set(metadata);
-      }
 
+      if (identityData) {
+        const publicData = JSON.parse(identityData);
+        const privateKeys = privateKeysData ? JSON.parse(privateKeysData) : null;
+        
+        // Reconstruir claves privadas si existen
+        let privateKeyData = null;
+        if (privateKeys && privateKeys.bbs && privateKeys.coconut) {
+          privateKeyData = {
+            bbs: { secretKeyHex: privateKeys.bbs },
+            coconut: { privateKeyHex: privateKeys.coconut }
+          };
+        }
+
+        const identity = await importFromStorage(publicData, /** @type {any} */ (privateKeyData));
+        
+        currentIdentity.set(/** @type {any} */ (identity));
+        this.currentIdentityId = identity.id;
+
+        if (metadataData) {
+          identityMetadata.set(JSON.parse(metadataData));
+        }
+
+        console.log('✅ Identidad cargada desde localStorage:', identity.personal?.name);
+      }
     } catch (error) {
-      console.error('Error cargando desde storage:', error);
-      // No lanzar error para permitir funcionamiento sin datos guardados
+      console.error('❌ Error cargando desde localStorage:', error);
     }
   }
 
   /**
-   * Limpia todos los errores
+   * Limpiar identidad actual
    */
-  clearErrors() {
-    identityError.set(null);
+  clearCurrentIdentity() {
+    currentIdentity.set(null);
+    this.currentIdentityId = null;
+    identityMetadata.set({
+      lastUpdated: null,
+      version: '2.0',
+      isNew: false,
+      hasBackup: false,
+      provider: 'bls12_381'
+    });
+    
+    if (browser) {
+      localStorage.removeItem(STORAGE_KEYS.IDENTITY);
+      localStorage.removeItem(STORAGE_KEYS.PRIVATE_KEYS);
+      localStorage.removeItem(STORAGE_KEYS.METADATA);
+    }
+    
+    console.log('✅ Identidad limpiada');
   }
 
   /**
-   * Obtiene resumen de la identidad actual
-   * @returns {Object|null} Resumen de identidad
+   * Listar todas las identidades disponibles
    */
-  getIdentitySummary() {
-    const identity = get(currentIdentity);
-    return identity ? getIdentitySummary(identity) : null;
+  getAllAvailableIdentities() {
+    return getProviderIdentities();
   }
 
   /**
-   * Verifica si hay una identidad cargada
-   * @returns {boolean} Tiene identidad
-   */
-  hasIdentity() {
-    return get(currentIdentity) !== null;
-  }
-
-  /**
-   * Verifica si la identidad está verificada
-   * @returns {boolean} Está verificada
-   */
-  isVerified() {
-    const status = get(verificationStatus);
-    return status.isVerified;
-  }
-
-  /**
-   * Verifica si la identidad está revocada
-   * @returns {boolean} Está revocada
-   */
-  isRevoked() {
-    const status = get(verificationStatus);
-    return status.isRevoked;
-  }
-
-  /**
-   * Obtiene estadísticas de la identidad
-   * @returns {Object} Estadísticas
+   * Obtener estadísticas del provider
    */
   getStats() {
-    const identity = get(currentIdentity);
-    const metadata = get(identityMetadata);
-    
-    if (!identity) {
-      return {
-        hasIdentity: false,
-        daysSinceCreation: 0,
-        isAdult: false,
-        verified: false,
-        revoked: false
-      };
-    }
-
-    const created = new Date(identity.created);
-    const now = new Date();
-    const daysSinceCreation = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
-
-    return {
-      hasIdentity: true,
-      daysSinceCreation,
-      isAdult: identity.personal.isAdult,
-      verified: identity.metadata.verified,
-      revoked: identity.metadata.revoked,
-      hasBackup: metadata.hasBackup,
-      version: identity.version
-    };
+    return getProviderStats();
   }
 }
 
 // Instancia singleton del store
-const identityStoreInstance = new IdentityStore();
+const identityStore = new IdentityStore();
+
+// =============================================================================
+// FUNCIONES PÚBLICAS DEL STORE
+// =============================================================================
 
 /**
- * Funciones utilitarias exportadas
+ * Crear nueva identidad
+ * @param {PersonalInfo} personalInfo - Información personal de la identidad
+ * @returns {Promise<Identity>}
  */
-
-/**
- * Crea una nueva identidad
- * @param {any} personalInfo - Información personal
- * @returns {Promise<any>} Identidad creada
- */
-export const createNewIdentity = (personalInfo) => {
-  return identityStoreInstance.createIdentity(personalInfo);
-};
-
-/**
- * Carga una identidad existente
- * @param {any} identityData - Datos de identidad
- * @returns {Promise<any>} Identidad cargada
- */
-export const loadExistingIdentity = (identityData) => {
-  return identityStoreInstance.loadIdentity(identityData);
-};
-
-/**
- * Exporta la identidad actual
- * @param {boolean} includePrivateKeys - Incluir claves privadas
- * @returns {any} Identidad exportada
- */
-export const exportCurrentIdentity = (includePrivateKeys = false) => {
-  return identityStoreInstance.exportIdentity(includePrivateKeys);
-};
-
-/**
- * Verifica la identidad actual
- * @returns {Promise<void>}
- */
-export const verifyCurrentIdentity = () => {
-  return identityStoreInstance.verifyIdentity();
-};
-
-/**
- * Revoca la identidad actual
- * @returns {Promise<void>}
- */
-export const revokeCurrentIdentity = () => {
-  return identityStoreInstance.revokeIdentity();
-};
-
-/**
- * Elimina la identidad actual
- * @returns {Promise<void>}
- */
-export const deleteCurrentIdentity = () => {
-  return identityStoreInstance.deleteIdentity();
-};
-
-/**
- * Crea backup de la identidad
- * @returns {Promise<any>} Datos del backup
- */
-export const createIdentityBackup = () => {
-  return identityStoreInstance.createBackup();
-};
-
-/**
- * Restaura desde backup
- * @returns {Promise<any>} Identidad restaurada
- */
-export const restoreIdentityFromBackup = () => {
-  return identityStoreInstance.restoreFromBackup();
-};
-
-/**
- * Limpia errores del store
- */
-export const clearIdentityErrors = () => {
-  identityStoreInstance.clearErrors();
-};
-
-/**
- * Obtiene resumen de identidad
- * @returns {any|null} Resumen
- */
-export const getIdentityInfo = () => {
-  return identityStoreInstance.getIdentitySummary();
-};
-
-/**
- * Obtiene estadísticas de identidad
- * @returns {any} Estadísticas
- */
-export const getIdentityStats = () => {
-  return identityStoreInstance.getStats();
-};
-
-/**
- * Actualiza metadatos de identidad
- * @param {any} updates - Actualizaciones
- * @returns {Promise<void>}
- */
-export const updateIdentityInfo = (updates) => {
-  return identityStoreInstance.updateIdentityMetadata(updates);
-};
-
-// Exportar la instancia para uso avanzado
-export const identityStore = identityStoreInstance;
-
-// Auto-inicializar en el navegador
-if (browser) {
-  identityStoreInstance.initialize();
+export async function createNewIdentity(personalInfo) {
+  return await identityStore.createNewIdentity(personalInfo);
 }
+
+/**
+ * Cargar identidad por ID
+ * @param {string} identityId - ID de la identidad a cargar
+ * @returns {Promise<Identity>}
+ */
+export async function loadIdentity(identityId) {
+  return await identityStore.loadIdentityById(identityId);
+}
+
+/**
+ * Actualizar identidad actual
+ * @param {Partial<PersonalInfo>} updates - Actualizaciones a aplicar
+ * @returns {Promise<Identity>}
+ */
+export async function updateCurrentIdentity(updates) {
+  return await identityStore.updateCurrentIdentity(updates);
+}
+
+/**
+ * Validar integridad
+ */
+export function validateCurrentIdentity() {
+  return identityStore.validateCurrentIdentity();
+}
+
+/**
+ * Exportar identidad
+ */
+export function exportCurrentIdentity(includePrivateKeys = false) {
+  return identityStore.exportCurrentIdentity(includePrivateKeys);
+}
+
+/**
+ * Importar identidad
+ * @param {Object} data - Datos de identidad exportados
+ * @param {Object|null} privateKeys - Claves privadas opcionales
+ * @returns {Promise<Identity>}
+ */
+export async function importIdentity(data, privateKeys = null) {
+  return await identityStore.importIdentity(data, privateKeys);
+}
+
+/**
+ * Limpiar identidad actual
+ */
+export function clearIdentity() {
+  identityStore.clearCurrentIdentity();
+}
+
+/**
+ * Obtener todas las identidades
+ */
+export function getAllIdentities() {
+  return identityStore.getAllAvailableIdentities();
+}
+
+/**
+ * Obtener estadísticas
+ */
+export function getIdentityStoreStats() {
+  return identityStore.getStats();
+}
+
+/**
+ * Inicializar manualmente el store
+ */
+export async function initializeIdentityStore() {
+  return await identityStore.initialize();
+}
+
+// Exportar instancia para casos avanzados
+export { identityStore };

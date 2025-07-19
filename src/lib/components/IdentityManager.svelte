@@ -1,7 +1,14 @@
 <script>
   import { onMount } from 'svelte';
-  import { writable } from 'svelte/store';
-  import { zencode_exec } from 'zenroom';
+  import { writable, get } from 'svelte/store';
+  import { createIdentity } from '$lib/crypto/identity-provider.js';
+  import { 
+    currentIdentity, 
+    identityLoading, 
+    identityError,
+    createNewIdentity,
+    clearIdentity
+  } from '$lib/crypto/stores/identity.js';
 
   // Props
   /** @type {(identity: any) => void} */
@@ -55,130 +62,30 @@
       const monthDiff = today.getMonth() - birthDate.getMonth();
       const finalAge = monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate()) ? age - 1 : age;
 
-      // Generar keypair principal usando un enfoque más simple
-      let keypair, blsKeypair;
-      
-      try {
-        // Intentar generar keypair con Zenroom - Script simplificado
-        const keypairScript = `
-Given nothing
-When I create the ecdh key
-and I create the credential keypair
-Then print my 'ecdh key'
-and print my 'credential keypair'
-        `;
-
-        console.log('Ejecutando script de keypair...');
-        const keypairResult = await zencode_exec(keypairScript);
-        console.log('Resultado keypair:', keypairResult);
-        
-        if (keypairResult.result && keypairResult.result.trim() !== '') {
-          const parsedResult = JSON.parse(keypairResult.result);
-          keypair = {
-            'credential keypair': parsedResult['credential_keypair'] || parsedResult['credential keypair'] || {
-              private: parsedResult['ecdh_key'] || crypto.randomUUID().replace(/-/g, ''),
-              public: crypto.randomUUID().replace(/-/g, '')
-            }
-          };
-        } else {
-          throw new Error('Resultado vacío de Zenroom para keypair');
-        }
-      } catch (zenroomError) {
-        console.warn('Error con Zenroom, usando fallback:', zenroomError);
-        // Fallback: generar keypair simple para demo
-        keypair = {
-          'credential keypair': {
-            private: crypto.randomUUID().replace(/-/g, ''),
-            public: crypto.randomUUID().replace(/-/g, '')
-          }
-        };
-      }
-
-      try {
-        // Intentar generar BLS keypair - Script simplificado
-        const blsKeypairScript = `
-Given nothing
-When I create the bls key
-Then print my 'bls key'
-        `;
-
-        console.log('Ejecutando script BLS...');
-        const blsResult = await zencode_exec(blsKeypairScript);
-        console.log('Resultado BLS:', blsResult);
-        
-        if (blsResult.result && blsResult.result.trim() !== '') {
-          const parsedResult = JSON.parse(blsResult.result);
-          blsKeypair = {
-            'bls keypair': {
-              private: parsedResult['bls_key'] || parsedResult['bls key'] || crypto.randomUUID().replace(/-/g, ''),
-              public: crypto.randomUUID().replace(/-/g, '')
-            }
-          };
-        } else {
-          throw new Error('Resultado vacío de Zenroom para BLS');
-        }
-      } catch (zenroomError) {
-        console.warn('Error con Zenroom BLS, usando fallback:', zenroomError);
-        // Fallback: generar BLS keypair simple para demo
-        blsKeypair = {
-          'bls keypair': {
-            private: crypto.randomUUID().replace(/-/g, ''),
-            public: crypto.randomUUID().replace(/-/g, '')
-          }
-        };
-      }
-
-      // Crear identidad completa
-      const newIdentity = {
-        id: crypto.randomUUID(),
-        personal: {
-          name: personalInfo.name,
-          birthDate: personalInfo.birthDate,
-          nationality: personalInfo.nationality,
-          age: finalAge,
-          isAdult: finalAge >= 18
-        },
-        keypairs: {
-          credential: keypair['credential keypair'],
-          bls: blsKeypair['bls keypair']
-        },
-        publicKeys: {
-          coconut: keypair['credential keypair'].public,
-          bls: blsKeypair['bls keypair'].public,
-          ecdsa: keypair['credential keypair'].public
-        },
-        metadata: {
-          created: new Date().toISOString(),
-          verified: false,
-          revoked: false,
-          version: '1.0'
-        },
-        // Mantener compatibilidad con estructura anterior
+      // Preparar información personal para el provider
+      const identityData = {
         name: personalInfo.name,
-        birthDate: personalInfo.birthDate,
-        nationality: personalInfo.nationality,
         age: finalAge,
-        isAdult: finalAge >= 18,
-        keypair: keypair['credential keypair'],
-        blsKeypair: blsKeypair['bls keypair'],
-        publicKey: keypair['credential keypair'].public,
-        created: new Date().toISOString(),
-        verified: false
+        country: personalInfo.nationality || 'España'
       };
 
-      // Guardar en store y localStorage
-      identityStore.set(newIdentity);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('zenroom-identity', JSON.stringify(newIdentity));
-      }
+      console.log('🔑 Creando identidad con provider BLS12-381...');
+      
+      // Crear identidad usando el store
+      const newIdentity = await createNewIdentity(identityData);
+      
+      console.log('✅ Identidad creada exitosamente:', newIdentity.personal.name);
 
+      // Actualizar store local para compatibilidad
+      identityStore.set(newIdentity);
+      
       // Notificar que la identidad fue creada
       if (typeof onIdentityCreated === 'function') {
         onIdentityCreated(newIdentity);
       }
       
     } catch (err) {
-      console.error('Error generando identidad:', err);
+      console.error('❌ Error generando identidad:', err);
       errorStore.set(err instanceof Error ? err.message : 'Error al generar la identidad');
     } finally {
       loadingStore.set(false);
@@ -187,19 +94,13 @@ Then print my 'bls key'
 
   // Función para cargar identidad existente
   function loadIdentity() {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('zenroom-identity');
-      if (saved) {
-        try {
-          const loadedIdentity = JSON.parse(saved);
-          identityStore.set(loadedIdentity);
-          // Notificar que la identidad fue cargada
-          if (typeof onIdentityLoaded === 'function') {
-            onIdentityLoaded(loadedIdentity);
-          }
-        } catch (err) {
-          errorStore.set('Error al cargar identidad guardada');
-        }
+    // Usar el store para obtener la identidad actual
+    const current = get(currentIdentity);
+    if (current) {
+      identityStore.set(current);
+      // Notificar que la identidad fue cargada
+      if (typeof onIdentityLoaded === 'function') {
+        onIdentityLoaded(current);
       }
     }
   }
@@ -207,10 +108,8 @@ Then print my 'bls key'
   // Función para eliminar identidad
   function deleteIdentity() {
     if (confirm('¿Estás seguro de que quieres eliminar esta identidad? Esta acción no se puede deshacer.')) {
+      clearIdentity();
       identityStore.set(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('zenroom-identity');
-      }
     }
   }
 
@@ -293,7 +192,7 @@ Then print my 'bls key'
 <div class="identity-manager">
   <div class="header">
     <h2>🔐 Gestor de Identidad Digital</h2>
-    <p class="subtitle">Crea y gestiona tu identidad criptográfica con Zenroom</p>
+    <p class="subtitle">Crea y gestiona tu identidad criptográfica con BLS12-381</p>
   </div>
 
   {#if error}

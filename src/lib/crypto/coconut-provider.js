@@ -5,9 +5,20 @@
  */
 
 // @ts-nocheck
-import { bls12_381 } from '@noble/curves/bls12-381';
-import { sha256 } from '@noble/hashes/sha256';
-import { randomBytes } from '@noble/hashes/utils';
+import { browser } from '$app/environment';
+
+// Imports dinámicos para evitar problemas de SSR
+let bls12_381, sha256, randomBytes;
+
+if (browser) {
+  try {
+    bls12_381 = (await import('@noble/curves/bls12-381')).bls12_381;
+    sha256 = (await import('@noble/hashes/sha256')).sha256;
+    randomBytes = (await import('@noble/hashes/utils')).randomBytes;
+  } catch (error) {
+    console.warn('Failed to load Coconut dependencies:', error);
+  }
+}
 
 /**
  * Clase principal para simulación inteligente de Coconut

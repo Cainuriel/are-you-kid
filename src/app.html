@@ -4,6 +4,30 @@
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script>
+			// Polyfills globales para el navegador
+			if (typeof global === 'undefined') {
+				var global = globalThis;
+			}
+			
+			// Polyfill para require (CommonJS)
+			if (typeof require === 'undefined') {
+				window.require = function(module) {
+					console.warn('require() called in browser for:', module);
+					return {};
+				};
+			}
+			
+			// Polyfill para process
+			if (typeof process === 'undefined') {
+				window.process = { 
+					env: {},
+					browser: true,
+					version: '',
+					versions: { node: '' }
+				};
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

@@ -5,12 +5,23 @@
  */
 
 // @ts-nocheck
-import { 
-  generateBls12381G2KeyPair, 
-  blsSign, 
-  blsCreateProof, 
-  blsVerifyProof 
-} from '@mattrglobal/bbs-signatures';
+import { browser } from '$app/environment';
+
+// Imports dinámicos para evitar problemas de SSR
+let Buffer, generateBls12381G2KeyPair, blsSign, blsCreateProof, blsVerifyProof;
+
+if (browser) {
+  try {
+    Buffer = (await import('buffer')).Buffer;
+    const bbsModule = await import('@mattrglobal/bbs-signatures');
+    generateBls12381G2KeyPair = bbsModule.generateBls12381G2KeyPair;
+    blsSign = bbsModule.blsSign;
+    blsCreateProof = bbsModule.blsCreateProof;
+    blsVerifyProof = bbsModule.blsVerifyProof;
+  } catch (error) {
+    console.warn('Failed to load BBS+ dependencies:', error);
+  }
+}
 
 /**
  * Clase principal para manejo de BBS+

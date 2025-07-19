@@ -5,9 +5,21 @@
  */
 
 // @ts-nocheck
-import { generateBls12381G2KeyPair } from '@mattrglobal/bbs-signatures';
-import { bls12_381 } from '@noble/curves/bls12-381';
-import { sha256 } from '@noble/hashes/sha256';
+import { browser } from '$app/environment';
+
+// Imports dinámicos para evitar problemas de SSR
+let Buffer, generateBls12381G2KeyPair, bls12_381, sha256;
+
+if (browser) {
+  try {
+    Buffer = (await import('buffer')).Buffer;
+    generateBls12381G2KeyPair = (await import('@mattrglobal/bbs-signatures')).generateBls12381G2KeyPair;
+    bls12_381 = (await import('@noble/curves/bls12-381')).bls12_381;
+    sha256 = (await import('@noble/hashes/sha256')).sha256;
+  } catch (error) {
+    console.warn('Failed to load crypto dependencies:', error);
+  }
+}
 import { randomBytes } from '@stablelib/random';
 
 /**
@@ -24,6 +36,23 @@ class IdentityProvider {
    */
   async createIdentity({ name, age, country, additionalData = {} }) {
     try {
+      // Verificar que las dependencias estén cargadas
+      if (!browser) {
+        throw new Error('Identity creation only available in browser environment');
+      }
+      
+      if (!Buffer || !generateBls12381G2KeyPair || !bls12_381 || !sha256) {
+        // Intentar cargar las dependencias dinámicamente
+        try {
+          Buffer = (await import('buffer')).Buffer;
+          generateBls12381G2KeyPair = (await import('@mattrglobal/bbs-signatures')).generateBls12381G2KeyPair;
+          bls12_381 = (await import('@noble/curves/bls12-381')).bls12_381;
+          sha256 = (await import('@noble/hashes/sha256')).sha256;
+        } catch (loadError) {
+          throw new Error('Failed to load crypto dependencies: ' + loadError.message);
+        }
+      }
+
       // Generar keypair BLS12-381 (compatible con BBS+ y Coconut)
       const keyPair = await generateBls12381G2KeyPair();
       

@@ -87,7 +87,7 @@
       
       // Limpiar localStorage
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('zenroom-identity');
+        localStorage.removeItem('bls12381-identity');
         localStorage.removeItem('verification-history');
         localStorage.removeItem('demo-stats');
       }
@@ -111,7 +111,7 @@
     
     // Cargar identidad desde localStorage si existe
     if (typeof window !== 'undefined') {
-      const savedIdentity = localStorage.getItem('zenroom-identity');
+      const savedIdentity = localStorage.getItem('bls12381-identity');
       if (savedIdentity) {
         try {
           const identity = JSON.parse(savedIdentity);
@@ -131,8 +131,8 @@
 </script>
 
 <svelte:head>
-  <title>Demo ZK Identity - Coconut & BBS+ con Zenroom</title>
-  <meta name="description" content="Demostración de identidad digital con protocolos Coconut y BBS+ usando Zenroom y SvelteKit" />
+  <title>Demo ZK Identity - Coconut & BBS+ con BLS12-381</title>
+  <meta name="description" content="Demostración de identidad digital con protocolos Coconut y BBS+ usando BLS12-381 y SvelteKit" />
 </svelte:head>
 
 <div class="app">
@@ -167,7 +167,7 @@
       <div class="welcome-content">
         <h2>🎉 Bienvenido a la Demo de Identidad Digital ZK</h2>
         <p>
-          Esta demostración muestra cómo usar <strong>Zenroom</strong> con <strong>SvelteKit</strong> 
+          Esta demostración muestra cómo usar <strong>BLS12-381</strong> con <strong>SvelteKit</strong> 
           para crear aplicaciones de identidad digital que preservan la privacidad usando
           <strong>protocolos Coconut y BBS+</strong>.
         </p>
@@ -267,9 +267,9 @@
   <footer class="main-footer">
     <div class="footer-content">
       <div class="footer-section">
-        <h4>🔐 Zenroom</h4>
-        <p>Máquina virtual criptográfica para Zero Knowledge</p>
-        <a href="https://zenroom.org" target="_blank" rel="noopener">
+        <h4>🔐 BLS12-381</h4>
+        <p>Curva elíptica criptográfica para Zero Knowledge</p>
+        <a href="https://hackmd.io/@benjaminion/bls12-381" target="_blank" rel="noopener">
           Documentación →
         </a>
       </div>
@@ -289,7 +289,7 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <p>Demo de Identidad Digital ZK - Protocolos Coconut & BBS+ con Zenroom</p>
+      <p>Demo de Identidad Digital ZK - Protocolos Coconut & BBS+ con BLS12-381</p>
     </div>
   </footer>
 </div>
@@ -546,79 +546,6 @@
     font-size: 1.1rem;
   }
 
-  .requirement-message {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    background: linear-gradient(135deg, #fef5e7, #fed7aa);
-    border: 1px solid #fbbf24;
-    border-radius: 16px;
-    padding: 2rem;
-    text-align: center;
-  }
-
-  .requirement-icon {
-    font-size: 3rem;
-  }
-
-  .requirement-message h3 {
-    color: #92400e;
-    margin-bottom: 0.5rem;
-  }
-
-  .requirement-message p {
-    color: #a16207;
-    margin-bottom: 1rem;
-  }
-
-  .placeholder-component {
-    text-align: center;
-    padding: 3rem;
-    background: linear-gradient(135deg, #f8f9ff, #e6f3ff);
-    border-radius: 20px;
-    border: 2px dashed #cbd5e0;
-  }
-
-  .placeholder-content h3 {
-    color: #2d3748;
-    margin-bottom: 1rem;
-    font-size: 1.5rem;
-  }
-
-  .placeholder-content p {
-    color: #666;
-    margin-bottom: 2rem;
-  }
-
-  .placeholder-features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1rem;
-    margin-bottom: 2rem;
-  }
-
-  .feature-preview {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    background: white;
-    padding: 1rem;
-    border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  }
-
-  .placeholder-note {
-    color: #667eea;
-    font-style: italic;
-    margin-bottom: 1rem;
-  }
-
-  .note {
-    color: #a0aec0;
-    font-size: 0.875rem;
-    margin-top: 0.5rem;
-  }
-
   .btn {
     padding: 0.75rem 1.5rem;
     border: none;
@@ -755,11 +682,6 @@
 
     .footer-content {
       grid-template-columns: 1fr;
-      text-align: center;
-    }
-
-    .requirement-message {
-      flex-direction: column;
       text-align: center;
     }
   }
