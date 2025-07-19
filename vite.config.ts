@@ -16,13 +16,20 @@ export default defineConfig({
 					next();
 				});
 			}
+		},
+		{
+			name: 'buffer-polyfill',
+			config() {
+				return {
+					define: {
+						global: 'globalThis',
+						'process.env.NODE_ENV': JSON.stringify('development'),
+						Buffer: 'globalThis.Buffer'
+					}
+				};
+			}
 		}
 	],
-	define: { 
-		global: 'globalThis',
-		process: 'process',
-		Buffer: ['buffer', 'Buffer']
-	},
 	optimizeDeps: { 
 		include: [
 			'@mattrglobal/bbs-signatures',
