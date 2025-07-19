@@ -1,0 +1,317 @@
+COCONUT:
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+Scenario 'credential': participant generates private credential key
+Given I am 'Alice'
+When I create the credential key
+Then print my 'keyring'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+Scenario 'credential': participant generates credential request
+Given I am 'Alice'
+Given I have my 'keyring'
+When I create the credential request
+Then print my 'credential request'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+
+Scenario 'credential': Credential Issuer private keys
+Given I am 'The Authority'
+when I create the issuer key
+Then print my 'keyring'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+
+Scenario 'credential': Issuer public key generation
+Given that I am known as 'The Authority'
+and I have my 'keyring'
+When I create the issuer public key
+Then print my 'issuer public key'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+Scenario 'credential': issuer signs the credential request
+Given I am 'The Authority'
+Given I have my 'keyring'
+Given I have a 'credential request' inside 'Alice'
+when I create the credential signature
+When I create the issuer public key
+Then print the 'credential signature'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+
+Scenario 'credential': participant aggregates credential signature(s)
+Given that I am known as 'Alice' 
+Given I have my 'keyring'
+Given I have a 'credential signature'
+When I create the credentials
+Then print my 'credentials'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+Scenario 'credential': participant generates proof 
+Given that I am known as 'Alice'
+Given I have my 'keyring'
+Given I have a 'issuer public key' inside 'The Authority'
+Given I have my 'credentials'
+When I aggregate all the issuer public keys
+When I create the credential proof
+Then print the 'credential proof'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+Scenario credential: anyone verifies the proof
+Given that I have a 'issuer public key' inside 'The Authority'
+Given I have a 'credential proof'
+When I aggregate all the issuer public keys
+When I verify the credential proof
+Then print the string 'The proof matches the public_key! So you can add zencode after the verify statement, that will execute only if the match occurs.'
+
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+Scenario credential: selective aggregation of credentials
+
+#  ---- Coconut selective disclosure proofgen --- 
+# -----------------------------------------------
+# In this script we do selective disclosure of attributes, generating an anonymised proof with blinding at issuance
+# 
+# The credential signatures and issuer public keys in input are grouped together is this example for simplicity,
+# this is anyway not a requirement, data can be organized differently as long as arreys are used at the time of the aggregation
+#---------
+#
+# IMPORTANT:
+# In order to be able to aggregate different credential signatures, and thus to use selective disclosure, 
+# the Participant needs to submit the same credential request to all the issuers. In a wallet implementation, the credential request 
+# would be generated along with the private key, be stored and reused each time a new credential is requested.
+
+# Here we load the the keyring of the participant, containing their secret key
+Given that I am known as 'Participant'
+Given I have my 'keyring'
+
+# Here we extract the credential signatures and rename them
+Given I have a 'credential signature' in 'AgeAuthority'
+Given I rename 'credential signature' to 'credA'
+Given I have a 'credential signature' in 'NationalityAuthority'
+Given I rename 'credential signature' to 'credB'
+Given I have a 'credential signature' in 'AMLBankAuthority'
+Given I rename 'credential signature' to 'credC'
+
+# Here we extract the issuer publi keys and rename them
+Given I have a 'issuer public key' in 'AgeAuthority'
+Given I rename 'issuer public key' to 'pkA'
+Given I have a 'issuer public key' in 'NationalityAuthority'
+Given I rename 'issuer public key' to 'pkB'
+Given I have a 'issuer public key' in 'AMLBankAuthority'
+Given I rename 'issuer public key' to 'pkC'
+
+# Here we join the public keys in an array: 
+# the third line is commented, as the participant decides not disclose its bank's AML status in this proof
+# IMPORTANT: The issuers' public keys we are moving the array have to match the credential signatures that we are moving 
+# into the second array, a few lines below. If the credential signatures and the issuer public keys don't match, the proof
+# will be generated anyway, but the verification of the proof will fail 
+When I create the new array
+When I rename 'new array' to 'issuer_pks'
+When I move 'pkA' in 'issuer_pks'
+When I move 'pkB' in 'issuer_pks'
+# When I move 'pkC' in 'issuer_pks'
+
+# Here we join the credential signatures  in an array, matching the issuer public keys we moved into the array above.
+When I create the new array
+When I rename 'new array' to 'credential_signatures'
+When I move 'credA' in 'credential_signatures'
+When I move 'credB' in 'credential_signatures'
+# When I move 'credC' in 'credential_signatures'
+
+# Here Coconut's cryptography happens:
+# 1) Credential signatures aggregation
+When I aggregate the credentials in 'credential_signatures'
+# 2) Aggregation of the issuers' public keys
+When I aggregate the verifiers in 'issuer_pks'
+# 2) Generation of the anonymised blinded proof 
+When I create the credential proof
+
+Then print the 'credential proof'
+
+
+# Implementation of Sonnino's Coconut zkp:
+# https://arxiv.org/abs/1802.07344
+
+Scenario credential: verify selectively disclosed proof
+
+#  ---- Coconut selective disclosure proofgen --- 
+# -----------------------------------------------
+# In this script we verify the anonymised proof, containing selectively disclosed of attributes, and blinding at issuance
+# 
+# The issuer public keys in input are grouped together is this example for simplicity,
+# this is anyway not a requirement, data can be organized differently as long as arreays are used at the time of the aggregation
+
+# Here we load the anonymised proof
+Given I have a 'credential proof'
+
+# Here we load the issuer public keys, extract them and rename them
+Given I have a 'issuer public key' in 'AgeAuthority'
+Given I rename 'issuer public key' to 'pkA'
+Given I have a 'issuer public key' in 'NationalityAuthority'
+Given I rename 'issuer public key' to 'pkB'
+Given I have a 'issuer public key' in 'AMLBankAuthority'
+Given I rename 'issuer public key' to 'pkC'
+
+
+# Here we join the public keys in an array
+When I create the new array
+When I rename 'new array' to 'pks'
+When I move 'pkA' in 'pks'
+When I move 'pkB' in 'pks'
+# When I move 'pkC' in 'pks'
+
+# Here Coconut's cryptography happens:
+# 1) Aggregation of the issuers' public keys
+When I aggregate the verifiers in 'pks'
+# 2) Verification of anonymised proof
+When I verify the credential proof
+
+# If the proof was verified correctly, the script will be execeuted to the end and text will be printed out
+Then print the string 'the selective credential proof matches!'
+
+
+BBS:
+
+
+# Implementation of BBS zkp:
+# https://identity.foundation/bbs-signature/draft-irtf-cfrg-bbs-signatures.html
+
+
+Scenario 'bbs': Issuer generates its keys
+
+Given I am 'The Authority'
+
+# Here we create the Issuer's secret and public keys:
+# Two types of signatures are supported, each requiring its own 
+# secret and public key. They are typically used  independently, 
+# in these examples  we demonstrate both:
+
+# Secret and public keys using the sha-256 algorithm:
+When I create the bbs key
+When I create the bbs public key
+
+# Secret and public keys using the shake-256 algorithm
+When I create the bbs shake key
+When I create the bbs shake public key
+
+# Here we print the sks and pks out
+Then print my 'bbs public key'
+Then print my 'bbs shake public key'
+Then print my 'keyring'
+
+
+# Implementation of BBS zkp:
+# https://identity.foundation/bbs-signature/draft-irtf-cfrg-bbs-signatures.html
+
+
+
+Scenario 'bbs': Issuer produces the BBS signatures
+
+Given I am 'The Authority'
+Given I have my 'keyring'
+
+# These messages were sent by the Participant to be signed by the Issuer.
+Given I have a 'string array' named 'bbs messages'
+
+
+# The Issuer produces BBS signature by signing the 'bbs messages'.
+# Two types of signatures are supported, they are typically used 
+# independently, here we demonstrate both:
+
+# - the 'bbs signatures' which uses sha-256
+When I create the bbs signature of 'bbs messages' 
+
+# - the 'bbs shaje signatures' which uses shake-256
+When I create the bbs shake signature of 'bbs messages' 
+
+# Here we print both the bbs signatures
+Then print the 'bbs signature'
+Then print the 'bbs shake signature'
+
+
+# Implementation of BBS zkp:
+# https://identity.foundation/bbs-signature/draft-irtf-cfrg-bbs-signatures.html
+
+
+Scenario 'bbs': participant generates the bbs proofs
+
+# First we load both the Issuer's public keys, the 
+# (as we 
+Given I have a 'bbs public key' inside 'The Authority'
+Given I have a 'bbs shake public key' inside 'The Authority'
+
+
+# The BBS credential is the signature of the BBS messages done by the Authority.
+Given I have a 'bbs_signature'
+Given I have a 'bbs_shake_signature'
+
+# You can load the messages with any array type (hex array. base64 array)
+Given I have a 'string array' named 'bbs messages'
+
+
+# The disclosed indexes are strictly positive numbers in ascending order.
+# They specify what messages will be disclosed in the proof.
+# The participant can also decide NOT to disclose any message by leaving the array EMPTY.
+Given I have a 'number array' named 'bbs disclosed indexes'
+
+# The presentation header is used to mitigate different attacks, or it can be 
+# used a side channel.
+# It is higly recommended to change it for each proof the participants creates.
+When I create the random object of '256' bits 
+When I rename the 'random_object' to 'bbs presentation header'
+
+# The disclosed messages are the messages which correspond to the disclosed indexes.
+When I create the bbs disclosed messages
+
+# Again we create a proof for both 'sha-256' or 'shake-256' signature:
+# First for the 'shake-256'
+When I create the bbs shake proof of the signature 'bbs_shake_signature' of the messages 'bbs messages' with public key 'bbs shake public key' presentation header 'bbs presentation header' and disclosed indexes 'bbs disclosed indexes'
+
+# Then for the 'sha-256'
+When I create the bbs proof of the signature 'bbs_signature' of the messages 'bbs messages' with public key 'bbs public key' presentation header 'bbs presentation header' and disclosed indexes 'bbs disclosed indexes'
+
+# Here we print out: 
+# - both the proof that the user has just created
+Then print the 'bbs proof'
+Then print the 'bbs shake proof'
+
+# - both the Issuer's public keys
+Then print the 'bbs public key'
+Then print the 'bbs shake public key'
+
+# Here we print the messages that the user wants to disclose
+Then print the 'bbs disclosed messages'
+# along with their indexes 
+Then print the 'bbs disclosed indexes'
+# and the presentation header
+Then print the 'bbs presentation header'
+
+

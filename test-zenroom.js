@@ -1,190 +1,195 @@
-// 🔍 SPECIFIC VERSION TEST FOR COCONUT AND BBS+
-// To confirm if the new version works
+const { zenroom_exec } = await import('zenroom');
 
-import { zenroom_exec, zencode_exec } from 'zenroom';
+// Contador global de estadísticas
+const testStats = {
+  total: 0,
+  passed: 0,
+  failed: 0,
+  errors: 0
+}
 
-console.log('🔍 ZENROOM VERSION TEST');
-console.log('='.repeat(40));
+/**
+ * Función de ayuda para ejecutar y reportar los resultados de una prueba.
+ */
+async function runTest(testName, zencode, data = null, keys = null) {
+  console.log(`\n🧪 Ejecutando prueba: ${testName}`);
+  testStats.total++;
+  
+  try {
+    const config = {};
+    if (data) {
+        config.data = JSON.stringify(data);
+    }
+    if (keys) {
+        config.keys = JSON.stringify(keys);
+    }
 
-// Check version
-console.log('Node.js:', process.version);
-console.log('Zenroom version: (checking...)');
+    const result = await zenroom_exec(zencode, Object.keys(config).length > 0? config : undefined);
+    
+    if (!result |
 
-// Specific test for advanced features
-async function testAdvancedFeatures() {
-    console.log('\n📋 TESTING ADVANCED FEATURES');
-    console.log('-'.repeat(40));
+typeof result.result === 'undefined') {
+        throw new Error(`La ejecución de Zenroom no devolvió un resultado válido. Logs: ${result.logs}`);
+    }
+    const output = JSON.parse(result.result);
+    
+    if ((output.output && output.output.includes("valid")) |
 
-    const tests = [
-        // Coconut tests
-        {
-            name: 'Coconut - Issuer Keypair',
-            script: `Scenario 'coconut': "Generate issuer keypair"
-Given that I am known as 'issuer'
-When I create my new issuer keypair
-Then print all data`,
-            critical: true
-        },
-        {
-            name: 'Coconut - Credential Keypair', 
-            script: `Scenario 'coconut': "Generate credential keypair"
-Given that I am known as 'citizen'
-When I create my new credential keypair
-Then print all data`,
-            critical: true
-        },
-        // BBS+ tests
-        {
-            name: 'BBS+ - Keypair',
-            script: `Scenario 'bbs': "Generate BBS keypair"
-Given nothing
+ Object.keys(output).length > 0) {
+      console.log(`✅ Éxito: ${testName} se completó y generó la salida esperada.`);
+      testStats.passed++;
+      return { success: true, output };
+    }
+    
+    console.error(`❌ Fallo: ${testName} se ejecutó pero el resultado no fue el esperado.`);
+    console.log('   Salida recibida:', result.result);
+    testStats.failed++;
+
+    return { success: false, output: null };
+
+  } catch (error) {
+    console.error(`❌ Error catastrófico en ${testName}:`, error);
+    testStats.failed++;
+    testStats.errors++;
+
+    return { success: false, output: null };
+  }
+}
+
+// =============================================================================
+// DEFINICIÓN DE LAS PRUEBAS (CON SINTAXIS Zencode CORREGIDA)
+// =============================================================================
+
+async function testECDH_and_EDDSA() {
+  const zencode = `Rule check version 5.0.0
+Scenario 'crypto': Intercambio ECDH y firma EDDSA
+Given I have a 'alice' keypair from a 'ed25519' curve
+AND I have a 'bob' keypair from a 'ed25519' curve
+WHEN I create an 'alice' ecdh-secret from 'bob' public key
+AND I sign the message 'this is a test' with the 'alice' keypair creating a 'my signature'
+AND I verify the message 'this is a test' with the 'alice' public key and 'my signature'
+THEN I expect the result to be valid`;
+  return runTest("ECDH (intercambio) y EDDSA (firma)", zencode);
+}
+
+async function testDilithium() {
+  const zencode = `Rule check version 5.0.0
+Scenario 'pqc': Firma Post-Cuántica con Dilithium
+Given a message 'this is a quantum-resistant signature'
+WHEN I create a 'dilithium' keypair
+AND I sign the message with my keypair creating a 'pqc signature'
+AND I verify the message 'this is a quantum-resistant signature' with my public key and the 'pqc signature'
+THEN I expect the result to be valid`;
+  return runTest("Dilithium (Post-Quantum)", zencode);
+}
+
+async function testBBS_KeyGeneration() {
+  const zencode = `Rule check version 5.0.0
+Scenario 'bbs': Generación de claves BBS+ (sha y shake)
+Given I am 'The Authority'
 When I create the bbs key
-Then print my 'bbs public key'`,
-            critical: true
-        },
-        {
-            name: 'BLS - Basic key',
-            script: `Given nothing
-When I create the bls key
-Then print my 'bls public key'`,
-            critical: true
-        },
-        // Working alternatives
-        {
-            name: 'ECDH - Reference (should work)',
-            script: `Scenario 'ecdh': "Generate ECDH keypair"
-Given that I am known as 'alice'
-When I create the ecdh key
-Then print my 'keyring'`,
-            critical: false
-        },
-        {
-            name: 'Random - Reference (should work)',
-            script: `Given nothing
-When I create the random of '32' bytes
-Then print the 'random' as 'hex'`,
-            critical: false
-        }
-    ];
-
-    const results = { critical: 0, total: 0, working: 0 };
-
-    for (const test of tests) {
-        console.log(`\n🧪 ${test.name}`);
-        try {
-            const result = await zencode_exec(test.script);
-            
-            if (result.result) {
-                console.log(`✅ SUCCESS: ${test.name}`);
-                results.working++;
-                if (test.critical) results.critical++;
-            } else {
-                console.log(`❌ FAIL: ${test.name}`);
-                console.log(`   Logs: ${result.logs || 'No logs'}`);
-            }
-        } catch (error) {
-            console.log(`❌ ERROR: ${test.name}`);
-            console.log(`   Error: ${error.message}`);
-        }
-        
-        results.total++;
-    }
-
-    return results;
+And I create the bbs public key
+And I create the bbs shake key
+And I create the bbs shake public key
+Then print my 'bbs public key'
+And print my 'bbs shake public key'
+And print my 'keyring'`;
+  return runTest("BBS+ Generación de Claves (sha y shake)", zencode);
 }
 
-// Memory and compatibility test
-async function testCompatibility() {
-    console.log('\n📋 COMPATIBILITY TEST');
-    console.log('-'.repeat(40));
+async function testBBS_ZK_Proof() {
+  const zencode = `Rule check version 5.0.0
+Scenario 'BBS_proof': Prueba de divulgación selectiva BBS+
+Given I have the messages
 
-    const memBefore = process.memoryUsage();
-    console.log('Memory before:', memBefore.heapUsed);
+| username | Alice |
+| role | administrator |
+WHEN I create a 'BBS' keypair
+AND I sign these messages with my keypair creating a 'bbs signature'
+AND I create a proof from the 'bbs signature' revealing the message 'username' creating a 'zk proof'
+AND I verify the 'zk proof' with my public key and the messages
 
-    try {
-        // Simple test that should work
-        const result = await zencode_exec(`Given nothing
-When I create the random of '16' bytes
-Then print the 'random' as 'hex'`);
-        
-        const memAfter = process.memoryUsage();
-        console.log('Memory after:', memAfter.heapUsed);
-        console.log('Memory diff:', memAfter.heapUsed - memBefore.heapUsed);
-        
-        if (result.result) {
-            console.log('✅ Basic compatibility: OK');
-            return true;
-        } else {
-            console.log('❌ Basic compatibility: FAIL');
-            return false;
-        }
-    } catch (error) {
-        console.log('❌ Compatibility error:', error.message);
-        return false;
-    }
+| username | Alice |
+THEN I expect the result to be valid`;
+  return runTest("BBS+ ZK (Prueba de Divulgación Selectiva)", zencode);
 }
 
-// Run tests
-async function runVersionTest() {
-    console.log('🚀 Starting version test...\n');
-    
-    const compatible = await testCompatibility();
-    if (!compatible) {
-        console.log('\n💥 FATAL: Basic compatibility failed');
-        console.log('🔧 Try different version or clean install');
-        return;
+async function testCoconut_FullWorkflow() {
+  console.log("\n🧪 Ejecutando prueba de flujo completo: Coconut");
+  
+  const aliceKeygenZencode = `Rule check version 5.0.0
+Scenario 'credential': Coconut - Alice genera su clave
+Given I am 'Alice'
+When I create the credential key
+Then print my 'keyring'`;
+  const { success: aliceSuccess, output: aliceOutput } = await runTest(
+    "   - Paso 1: Alice genera su clave de credencial", 
+    aliceKeygenZencode
+  );
+  if (!aliceSuccess) {
+      console.error("   -> Flujo de Coconut detenido porque el paso 1 falló.");
+      return;
+  };
+
+  const authoritySignZencode = `Rule check version 5.0.0
+Scenario 'credential': Coconut - La Autoridad firma la petición
+Given I am 'The Authority'
+And I have my 'keyring'
+And I have a 'credential request' inside 'Alice'
+When I create the credential signature
+Then print the 'credential signature'`;
+  
+  const authorityKeys = {
+    keyring: {
+      "credential_sk": "c928562726d400051e5336335133604f331616147d177302c893633854b70608"
     }
-    
-    const results = await testAdvancedFeatures();
-    
-    console.log('\n🎯 FINAL RESULTS');
-    console.log('='.repeat(40));
-    console.log(`Working tests: ${results.working}/${results.total}`);
-    console.log(`Critical features: ${results.critical}/4`);
-    
-    if (results.critical >= 2) {
-        console.log('\n🎉 SUCCESS: Zenroom has advanced crypto features!');
-        console.log('✅ You can use Coconut and/or BBS+');
-        console.log('📝 Use the syntax that showed SUCCESS above');
-    } else if (results.critical >= 1) {
-        console.log('\n🟡 PARTIAL: Some advanced features work');
-        console.log('🔧 Use only the features that work');
-        console.log('📝 Consider reporting partial functionality');
-    } else {
-        console.log('\n❌ FAIL: No advanced crypto features');
-        console.log('🔧 RECOMMENDATIONS:');
-        console.log('   1. Try zenroom@5.18.0 or @latest');
-        console.log('   2. Use APIRoom.net for development');
-        console.log('   3. Use alternative libraries:');
-        console.log('      - @mattrglobal/bbs-signatures');
-        console.log('      - @stablelib/bls12-381');
-        console.log('   4. Use Zenroom CLI instead of npm');
-    }
-    
-    console.log('\n📋 NEXT STEPS:');
-    if (results.critical === 0) {
-        console.log('🔧 The npm package appears to be incomplete');
-        console.log('🌐 Try APIRoom.net to confirm Zenroom works');
-        console.log('📦 Consider using dedicated BBS+/Coconut libraries');
-    } else {
-        console.log('🎯 Build your app with the working features');
-        console.log('📚 Check Zenroom documentation for more examples');
-    }
+  };
+  const authorityData = {
+      Alice: aliceOutput
+  };
+
+  await runTest(
+    "   - Paso 2: La Autoridad firma la petición de Alice", 
+    authoritySignZencode, 
+    authorityData,
+    authorityKeys
+  );
 }
 
-runVersionTest().catch(console.error);
+// =============================================================================
+// EJECUTOR PRINCIPAL
+// =============================================================================
 
-//  VERSIONING NOTES:
-/*
- ZENROOM VERSIONS:
-- 5.10.0: Basic crypto, no advanced features
-- 5.15.0: More stable, might have more features
-- 5.18.0: Recent stable, best chance for full features
-- 5.19.2: Latest, might have bugs but most features
+async function main() {
+  console.log('🚀 Iniciando conjunto de pruebas con Zencode corregido...');
+  
+  await testECDH_and_EDDSA();
+  await testDilithium();
+  await testBBS_KeyGeneration();
+  await testBBS_ZK_Proof();
+  await testCoconut_FullWorkflow();
+  
+  console.log("\n" + "=".repeat(60));
+  console.log("📊 ESTADÍSTICAS FINALES");
+  console.log("=".repeat(60));
+  console.log(`🧪 Total de pruebas ejecutadas: ${testStats.total}`);
+  console.log(`✅ Pruebas exitosas: ${testStats.passed}`);
+  console.log(`❌ Pruebas fallidas: ${testStats.failed}`);
+  
+  if (testStats.errors.length > 0) {
+    console.log("\n💥 ERRORES DETALLADOS:");
+    testStats.errors.forEach((error, index) => {
+      console.log(`\n${index + 1}. ${error.test}`);
+      console.log(`   Mensaje: ${error.message |
 
- EXPECTED RESULTS:
-- If 0 critical features: npm package incomplete
-- If 1-2 critical features: partial implementation
-- If 3-4 critical features: full implementation
+ 'Resultado inesperado'}`);
+      if (error.output) {
+        console.log(`   Salida: ${error.output}`);
+      }
+    });
+  }
+  
+  console.log("\n🏁 Pruebas finalizadas.");
+}
 
-*/
+main();

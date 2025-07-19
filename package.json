@@ -26,6 +26,6 @@
 	},
 	"dependencies": {
 		"ethers": "^6.15.0",
-		"zenroom": "^5.18.0"
+		"zenroom": "^5.24.2"
 	}
 }
