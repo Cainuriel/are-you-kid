@@ -25,6 +25,10 @@
 		"vite": "^7.0.4"
 	},
 	"dependencies": {
+		"@mattrglobal/bbs-signatures": "^2.0.0",
+		"@noble/curves": "^1.9.4",
+		"@noble/hashes": "^1.8.0",
+		"@stablelib/random": "^2.0.1",
 		"ethers": "^6.15.0",
 		"zenroom": "^5.24.2"
 	}
