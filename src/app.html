@@ -4,56 +4,6 @@
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<script>
-			// Polyfills globales para el navegador
-			if (typeof global === 'undefined') {
-				var global = globalThis;
-			}
-			
-			// Polyfill para require (CommonJS)
-			if (typeof require === 'undefined') {
-				window.require = function(module) {
-					console.warn('require() called in browser for:', module);
-					return {};
-				};
-			}
-			
-			// Polyfill para process
-			if (typeof process === 'undefined') {
-				window.process = { 
-					env: {},
-					browser: true,
-					version: '',
-					versions: { node: '' }
-				};
-			}
-			
-			// Buffer polyfill simple para evitar errores
-			if (typeof Buffer === 'undefined') {
-				window.Buffer = {
-					from: function(data, encoding) {
-						if (typeof data === 'string') {
-							const encoder = new TextEncoder();
-							return encoder.encode(data);
-						}
-						if (data instanceof ArrayBuffer) {
-							return new Uint8Array(data);
-						}
-						return new Uint8Array(data);
-					},
-					alloc: function(size) {
-						return new Uint8Array(size);
-					},
-					allocUnsafe: function(size) {
-						return new Uint8Array(size);
-					},
-					isBuffer: function(obj) {
-						return obj instanceof Uint8Array;
-					}
-				};
-				globalThis.Buffer = window.Buffer;
-			}
-		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

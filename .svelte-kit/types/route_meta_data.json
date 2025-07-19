@@ -1,3 +1,9 @@
 {
-	"/": []
+	"/": [],
+	"/api/crypto/identity/create": [
+		"src/routes/api/crypto/identity/create/+server.js"
+	],
+	"/api/crypto/identity/[id]": [
+		"src/routes/api/crypto/identity/[id]/+server.js"
+	]
 }
